@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 
 namespace StateGraphSystem {
-
     public class StateMachine<State> {
         State _initialState;
         State _state;
@@ -16,31 +15,47 @@ namespace StateGraphSystem {
             _state2state = new Dictionary<State, Dictionary<State, Transition>> ();
         }
 
+		public Transition this[State stateFrom, State stateTo] {
+			get {
+				Transition tr;
+				if (TryGetTransition(stateFrom, stateTo, out tr))
+					return tr;
+				return null;
+			}
+			set {
+				if (SetTransition(stateFrom, stateTo, value))
+					Debug.LogFormat ("Trigger Replaced : ({0})-->({1})", stateFrom, stateTo);
+			}
+		}
+
+		public bool TryGetTransition(State stateFrom, State stateTo, out Transition tr) {
+			Dictionary<State, Transition> s2t;
+			return _state2state.TryGetValue (stateFrom, out s2t) && s2t.TryGetValue (stateTo, out tr);			
+		}
+		public bool SetTransition(State stateFrom, State stateTo, Transition tr) {
+			var replace = false;
+			Dictionary<State, Transition> s2t;
+			if (!_state2state.TryGetValue (stateFrom, out s2t))
+				_state2state [stateFrom] = s2t = new Dictionary<State, Transition> ();
+			else if (replace = s2t.ContainsKey (stateTo))
+				Debug.LogFormat ("Trigger Replaced : ({0})-->({1})", stateFrom, stateTo);
+			s2t [stateTo] = tr;
+			return replace;
+		}
+        public bool Is(State state) {
+            return _state.Equals(state);
+        }
         public bool Next(State stateTo) {
-            Dictionary<State, Transition> state2transition;
-            if (!_state2state.TryGetValue (_state, out state2transition))
-                return false;
-
-            Transition tr;
-            if (!state2transition.TryGetValue(stateTo, out tr))
-                return false;
-
-            if (!tr.Next (_state))
-                return false;
-
-            _state = stateTo;
-            return true;
+			var tr = this [_state, stateTo];
+			if (tr != null && tr.Next (_state)) {
+				_state = stateTo;
+				return true;
+			}
+			return false;
         }
         public Transition Tr(State stateFrom, State stateTo) {
-            Dictionary<State, Transition> state2transition;
-            if (!_state2state.TryGetValue (stateFrom, out state2transition))
-                _state2state [stateFrom] = state2transition = new Dictionary<State, Transition> ();
-
-            if (state2transition.ContainsKey (stateTo))
-                Debug.LogFormat ("Trigger Replaced : ({0})-->({1})", stateFrom, stateTo);
-
             var transition = new Transition (stateTo);
-            state2transition [stateTo] = transition;
+			this [stateFrom, stateTo] = transition;
             return transition;
         }
 
