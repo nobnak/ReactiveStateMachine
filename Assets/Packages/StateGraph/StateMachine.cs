@@ -7,12 +7,14 @@ namespace StateGraphSystem {
         State _initialState;
         State _state;
         Dictionary<State, Dictionary<State, Transition>> _state2state;
+        Dictionary<State, Handler> _state2handler;
 
         public State Current { get { return _state; } }
 
         public StateMachine(State initialState) {
             _state = _initialState = initialState;
             _state2state = new Dictionary<State, Dictionary<State, Transition>> ();
+            _state2handler = new Dictionary<State, Handler> ();
         }
 
 		public Transition this[State stateFrom, State stateTo] {
@@ -42,6 +44,11 @@ namespace StateGraphSystem {
 			s2t [stateTo] = tr;
 			return replace;
 		}
+        public bool TryGetHandler(State state, out Handler hr) {
+            return _state2handler.TryGetValue(_state, out hr);
+        }
+
+        #region Flow
         public bool Is(State state) {
             return _state.Equals(state);
         }
@@ -53,11 +60,26 @@ namespace StateGraphSystem {
 			}
 			return false;
         }
+        public void Update() {
+            Handler h;
+            if (TryGetHandler (_state, out h))
+                h.Update (_state);
+        }
+        #endregion
+
+        #region Definition
         public Transition Tr(State stateFrom, State stateTo) {
             var transition = new Transition (stateTo);
 			this [stateFrom, stateTo] = transition;
             return transition;
         }
+        public Handler Hr(State state) {
+            Handler h;
+            if (!TryGetHandler(state, out h))
+                h = _state2handler [state] = new Handler ();
+            return h;
+        }
+        #endregion
 
         public StateMachine<State> Restart() { return Restart (_initialState); }
         public StateMachine<State> Restart(State initialState) { 
@@ -65,22 +87,33 @@ namespace StateGraphSystem {
             return this;
         }
 
+        public class Handler {
+            event System.Action<State> _OnUpdate;
+
+            public Handler OnUpdate(System.Action<State> f) {
+                _OnUpdate += f;
+                return this;
+            }
+            public Handler Update(State state) {
+                if (_OnUpdate != null)
+                    _OnUpdate (state);
+                return this;
+            }
+        }
         public class Transition {
             public readonly State NextState;
 
-            System.Action<State, State> _onTrigger;
+            event System.Action<State, State> _onTrigger;
             System.Func<State, State, bool> _condition;
 
             public Transition(State nextState) {
                 this.NextState = nextState;
             }
 
-            public Transition On(System.Action onTrigger) { return On ((f, t) => onTrigger()); }
             public Transition On(System.Action<State, State> onTrigger) {
-                this._onTrigger = onTrigger;
+                this._onTrigger += onTrigger;
                 return this;
             }
-            public Transition Cond(System.Func<bool> condition) { return Cond ((f, t) => condition()); }
             public Transition Cond(System.Func<State, State, bool> condition) {
                 this._condition = condition;
                 return this;
@@ -98,7 +131,7 @@ namespace StateGraphSystem {
             }
             void Notify(State stateFrom) {
                 if (_onTrigger != null)
-                    _onTrigger (stateFrom, NextState);                
+                    _onTrigger(stateFrom, NextState);                
             }
         }
     }

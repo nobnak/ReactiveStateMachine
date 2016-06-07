@@ -15,18 +15,18 @@ namespace StateGraphSystem {
             var smTransition = new StateMachine<TransitionState> (TransitionState.None);
 
             smTransition.Tr (TransitionState.None, TransitionState.Spawning).Cond (
-                () => smVital.Is(VitalState.Dead));
+                (a, b) => smVital.Is(VitalState.Dead));
             smTransition.Tr (TransitionState.None, TransitionState.Dying).Cond (
-                () => smVital.Is(VitalState.Alive));
+                (a, b) => smVital.Is(VitalState.Alive));
             smTransition.Tr (TransitionState.Spawning, TransitionState.None).Cond (
-                () => smVital.Is(VitalState.Dead));
+                (a, b) => smVital.Is(VitalState.Dead));
             smTransition.Tr (TransitionState.Dying, TransitionState.None).Cond (
-                () => smVital.Is(VitalState.Alive));
+                (a, b) => smVital.Is(VitalState.Alive));
 
             smVital.Tr (VitalState.Dead, VitalState.Alive).Cond (
-                () => smTransition.Is(TransitionState.Spawning) && smTransition.Next (TransitionState.None));
+                (a, b) => smTransition.Is(TransitionState.Spawning) && smTransition.Next (TransitionState.None));
             smVital.Tr (VitalState.Alive, VitalState.Dead).Cond (
-                () => smTransition.Is(TransitionState.Dying) && smTransition.Next (TransitionState.None));
+                (a, b) => smTransition.Is(TransitionState.Dying) && smTransition.Next (TransitionState.None));
 
             Assert.IsTrue (smTransition.Next (TransitionState.Spawning));
             Assert.AreEqual (smTransition.Current, TransitionState.Spawning);
