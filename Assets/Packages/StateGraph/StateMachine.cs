@@ -31,6 +31,7 @@ namespace StateGraphSystem {
 		}
 
 		public bool TryGetTransition(State stateFrom, State stateTo, out Transition tr) {
+            tr = null;
 			Dictionary<State, Transition> s2t;
 			return _state2state.TryGetValue (stateFrom, out s2t) && s2t.TryGetValue (stateTo, out tr);			
 		}
@@ -45,7 +46,7 @@ namespace StateGraphSystem {
 			return replace;
 		}
         public bool TryGetHandler(State state, out Handler hr) {
-            return _state2handler.TryGetValue(_state, out hr);
+            return _state2handler.TryGetValue(state, out hr);
         }
 
         #region Flow
@@ -69,14 +70,15 @@ namespace StateGraphSystem {
 
         #region Definition
         public Transition Tr(State stateFrom, State stateTo) {
-            var transition = new Transition (stateTo);
-			this [stateFrom, stateTo] = transition;
-            return transition;
+            Transition t;
+            if (!TryGetTransition(stateFrom, stateTo, out t))
+                t = this [stateFrom, stateTo] = new Transition (stateTo);
+            return t;
         }
         public Handler Hr(State state) {
             Handler h;
             if (!TryGetHandler(state, out h))
-                h = _state2handler [state] = new Handler ();
+                h = _state2handler [state] = new Handler (state);
             return h;
         }
         #endregion
@@ -88,8 +90,13 @@ namespace StateGraphSystem {
         }
 
         public class Handler {
+            public readonly State state;
+
             event System.Action<State> _OnUpdate;
 
+            public Handler(State state) {
+                this.state = state;
+            }
             public Handler OnUpdate(System.Action<State> f) {
                 _OnUpdate += f;
                 return this;

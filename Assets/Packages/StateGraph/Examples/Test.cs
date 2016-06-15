@@ -28,6 +28,25 @@ namespace StateGraphSystem {
             smVital.Tr (VitalState.Alive, VitalState.Dead).Cond (
                 (a, b) => smTransition.Is(TransitionState.Dying) && smTransition.Next (TransitionState.None));
 
+            var updateCounter = 0;
+            smVital.Hr (VitalState.Alive).OnUpdate ((a) => {
+                Assert.AreEqual(a, VitalState.Alive);
+                updateCounter++;
+            });
+            smVital.Hr (VitalState.Dead).OnUpdate ((a) => {
+                Assert.AreEqual(a, VitalState.Dead);
+                updateCounter++;
+            });
+            Assert.AreEqual (smVital.Hr (VitalState.Alive).state, VitalState.Alive);
+            Assert.AreEqual (smVital.Hr (VitalState.Dead).state, VitalState.Dead);
+
+            var counter = 0;
+            smTransition.Tr (TransitionState.None, TransitionState.Spawning).On ((a, b) => {
+                counter++;
+            }).On ((a, b) => {
+                counter++;
+            });
+
             Assert.IsTrue (smTransition.Next (TransitionState.Spawning));
             Assert.AreEqual (smTransition.Current, TransitionState.Spawning);
             Assert.AreEqual (smVital.Current, VitalState.Dead);
@@ -35,6 +54,9 @@ namespace StateGraphSystem {
             Assert.IsTrue (smVital.Next (VitalState.Alive));
             Assert.AreEqual (smVital.Current, VitalState.Alive);
             Assert.AreEqual (smTransition.Current, TransitionState.None);
+            for (var i = 0; i < 2; i++)
+                smVital.Update ();
+            Assert.AreEqual (updateCounter, 2);
 
             Assert.IsTrue (smTransition.Next (TransitionState.Dying));
             Assert.AreEqual (smTransition.Current, TransitionState.Dying);
@@ -43,6 +65,11 @@ namespace StateGraphSystem {
             Assert.IsTrue (smVital.Next (VitalState.Dead));
             Assert.AreEqual (smVital.Current, VitalState.Dead);
             Assert.AreEqual (smTransition.Current, TransitionState.None);
+            for (var i = 0; i < 2; i++)
+                smVital.Update ();
+            Assert.AreEqual (updateCounter, 4);
+
+            Assert.AreEqual (counter, 2);
         }            
     }
 }
