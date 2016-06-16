@@ -64,7 +64,7 @@ namespace ReactiveStateMachine {
         public void Update() {
             Handler h;
             if (TryGetHandler (_state, out h))
-                h.Update (_state);
+                h.Update ();
         }
         #endregion
 
@@ -89,38 +89,35 @@ namespace ReactiveStateMachine {
             return this;
         }
 
-        public class Handler {
+		public class Handler : IObservable<State> {
             public readonly State state;
-
-            event System.Action<State> _OnUpdate;
+			event System.Action<State> _observable;
 
             public Handler(State state) {
                 this.state = state;
             }
-            public Handler OnUpdate(System.Action<State> f) {
-                _OnUpdate += f;
-                return this;
-            }
-            public Handler Update(State state) {
-                if (_OnUpdate != null)
-                    _OnUpdate (state);
-                return this;
-            }
+			public Handler Update() {
+				if (_observable != null)
+					_observable(state);
+				return this;
+			}
+			#region IObservable implementation
+			public System.IDisposable Subscribe (System.Action<State> observer) {
+				_observable += observer;
+				return new Disposer (() => _observable -= observer);
+			}
+			#endregion
         }
-        public class Transition {
+		public class Transition : IObservable<State, State> {
             public readonly State NextState;
 
-            event System.Action<State, State> _onTrigger;
+            event System.Action<State, State> _observable;
             System.Func<State, State, bool> _condition;
 
             public Transition(State nextState) {
                 this.NextState = nextState;
             }
 
-            public Transition On(System.Action<State, State> onTrigger) {
-                this._onTrigger += onTrigger;
-                return this;
-            }
             public Transition Cond(System.Func<State, State, bool> condition) {
                 this._condition = condition;
                 return this;
@@ -132,14 +129,43 @@ namespace ReactiveStateMachine {
                 Notify (stateFrom);
                 return true;
             }
-
             bool Check(State stateFrom) {
                 return _condition == null || _condition (stateFrom, NextState);
             }
             void Notify(State stateFrom) {
-                if (_onTrigger != null)
-                    _onTrigger(stateFrom, NextState);                
+                if (_observable != null)
+                    _observable(stateFrom, NextState);                
             }
+			#region IObservable implementation
+			public System.IDisposable Subscribe (System.Action<State, State> observer) {
+				_observable += observer;
+				return new Disposer(() => _observable -= observer);
+			}
+			#endregion
         }
     }
+
+	public interface IObservable<T> {
+		System.IDisposable Subscribe(System.Action<T> observer);
+	}
+	public interface IObservable<S, T> {
+		System.IDisposable Subscribe(System.Action<S, T> observer);
+	}
+	public class Disposer : System.IDisposable {
+		bool _disposed = false;
+		readonly System.Action _disposer;
+
+		public Disposer(System.Action disposer) {
+			this._disposer = disposer;
+		}
+
+		#region IDisposable implementation
+		public void Dispose () 	{
+			if (!_disposed) {
+				_disposed = true;
+				_disposer ();
+			}
+		}
+		#endregion
+	}
 }
