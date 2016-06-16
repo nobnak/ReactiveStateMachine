@@ -2,7 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 
-namespace StateGraphSystem {
+namespace ReactiveStateMachine {
     public class StateMachine<State> {
         State _initialState;
         State _state;

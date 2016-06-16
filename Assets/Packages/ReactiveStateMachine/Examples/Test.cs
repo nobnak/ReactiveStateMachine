@@ -2,7 +2,7 @@
 using System.Collections;
 using UnityEngine.Assertions;
 
-namespace StateGraphSystem {
+namespace ReactiveStateMachine {
 
     public class Test : MonoBehaviour {
         public const string FORMAT_TRIGGER = "Triggered ({0})-->({1})";
