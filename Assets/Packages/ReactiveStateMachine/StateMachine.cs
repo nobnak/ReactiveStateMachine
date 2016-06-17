@@ -7,14 +7,14 @@ namespace ReactiveStateMachine {
         State _initialState;
         State _state;
         Dictionary<State, Dictionary<State, Transition>> _state2state;
-        Dictionary<State, Handler> _state2handler;
+        Dictionary<State, StateHandler> _state2handler;
 
         public State Current { get { return _state; } }
 
         public StateMachine(State initialState) {
             _state = _initialState = initialState;
             _state2state = new Dictionary<State, Dictionary<State, Transition>> ();
-            _state2handler = new Dictionary<State, Handler> ();
+            _state2handler = new Dictionary<State, StateHandler> ();
         }
 
 		public Transition this[State stateFrom, State stateTo] {
@@ -45,7 +45,7 @@ namespace ReactiveStateMachine {
 			s2t [stateTo] = tr;
 			return replace;
 		}
-        public bool TryGetHandler(State state, out Handler hr) {
+        public bool TryGetHandler(State state, out StateHandler hr) {
             return _state2handler.TryGetValue(state, out hr);
         }
 
@@ -62,7 +62,7 @@ namespace ReactiveStateMachine {
 			return false;
         }
         public void Update() {
-            Handler h;
+            StateHandler h;
             if (TryGetHandler (_state, out h))
                 h.Update ();
         }
@@ -75,10 +75,10 @@ namespace ReactiveStateMachine {
                 t = this [stateFrom, stateTo] = new Transition (stateTo);
             return t;
         }
-        public Handler Hr(State state) {
-            Handler h;
+        public StateHandler St(State state) {
+            StateHandler h;
             if (!TryGetHandler(state, out h))
-                h = _state2handler [state] = new Handler (state);
+                h = _state2handler [state] = new StateHandler (state);
             return h;
         }
         #endregion
@@ -89,14 +89,14 @@ namespace ReactiveStateMachine {
             return this;
         }
 
-		public class Handler : IObservable<State> {
+		public class StateHandler : IObservable<State> {
             public readonly State state;
 			event System.Action<State> _observable;
 
-            public Handler(State state) {
+            public StateHandler(State state) {
                 this.state = state;
             }
-			public Handler Update() {
+			public StateHandler Update() {
 				if (_observable != null)
 					_observable(state);
 				return this;
@@ -167,5 +167,11 @@ namespace ReactiveStateMachine {
 			}
 		}
 		#endregion
+	}
+
+	public static class Extension {
+		public static IObservable<T> Where<T>(this IObservable<T> observable, System.Func<T, bool> filter) {
+			throw new System.NotImplementedException ();
+		}
 	}
 }
