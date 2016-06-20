@@ -29,16 +29,16 @@ namespace ReactiveStateMachine {
                 (a, b) => smTransition.Is(TransitionState.Dying) && smTransition.Next (TransitionState.None));
 
             var updateCounter = 0;
-			smVital.Hr (VitalState.Alive).Subscribe ((a) => {
+			smVital.St (VitalState.Alive).Subscribe ((a) => {
                 Assert.AreEqual(a, VitalState.Alive);
                 updateCounter++;
             });
-			smVital.Hr (VitalState.Dead).Subscribe ((a) => {
+			smVital.St (VitalState.Dead).Subscribe ((a) => {
                 Assert.AreEqual(a, VitalState.Dead);
                 updateCounter++;
             });
-            Assert.AreEqual (smVital.Hr (VitalState.Alive).state, VitalState.Alive);
-            Assert.AreEqual (smVital.Hr (VitalState.Dead).state, VitalState.Dead);
+			Assert.AreEqual (smVital.St (VitalState.Alive).state, VitalState.Alive);
+			Assert.AreEqual (smVital.St (VitalState.Dead).state, VitalState.Dead);
 
             var counter = 0;
 			smTransition.Tr (TransitionState.None, TransitionState.Spawning).Subscribe ((a, b) => {

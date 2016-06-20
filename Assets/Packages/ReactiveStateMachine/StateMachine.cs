@@ -3,11 +3,14 @@ using System.Collections;
 using System.Collections.Generic;
 
 namespace ReactiveStateMachine {
-    public class StateMachine<State> {
+	public class StateMachine<State> : IObservable<State>, IObservable<State, State> {
         State _initialState;
         State _state;
         Dictionary<State, Dictionary<State, Transition>> _state2state;
         Dictionary<State, StateHandler> _state2handler;
+
+		event System.Action<State, State> _onStateChange;
+		event System.Action<State> _onStateUpdate;
 
         public State Current { get { return _state; } }
 
@@ -17,7 +20,70 @@ namespace ReactiveStateMachine {
             _state2handler = new Dictionary<State, StateHandler> ();
         }
 
-		public Transition this[State stateFrom, State stateTo] {
+        #region Flow
+        public bool Is(State state) {
+            return _state.Equals(state);
+        }
+        public bool Next(State stateTo) {
+			var tr = this [_state, stateTo];
+			if (tr != null && tr.Next ()) {
+				Notify (_state, stateTo);
+				_state = stateTo;
+				return true;
+			}
+			return false;
+        }
+        public void Update() {
+            StateHandler h;
+            if (TryGetHandler (_state, out h))
+                h.Update ();
+			Notify (_state);
+        }
+        #endregion
+
+        #region Definition
+        public Transition Tr(State stateFrom, State stateTo) {
+            Transition t;
+            if (!TryGetTransition(stateFrom, stateTo, out t))
+                t = this [stateFrom, stateTo] = new Transition (stateFrom, stateTo);
+            return t;
+        }
+        public StateHandler St(State state) {
+            StateHandler h;
+            if (!TryGetHandler(state, out h))
+                h = _state2handler [state] = new StateHandler (state);
+            return h;
+        }
+        #endregion
+
+		#region events
+		void Notify(State state) {
+			if (_onStateUpdate != null)
+				_onStateUpdate (state);
+		}
+		void Notify(State stateFrom, State stateTo) {
+			if (_onStateChange != null)
+				_onStateChange (_state, stateTo);
+		}
+		#region IObservable implementation
+		public System.IDisposable Subscribe (System.Action<State> observer) {
+			_onStateUpdate += observer;
+			return new Disposer (() => _onStateUpdate -= observer);
+		}
+		public System.IDisposable Subscribe (System.Action<State, State> observer) {
+			_onStateChange += observer;
+			return new Disposer (() => _onStateChange -= observer);
+		}
+		#endregion
+		#endregion
+
+        public StateMachine<State> Restart() { return Restart (_initialState); }
+        public StateMachine<State> Restart(State initialState) { 
+            _initialState = _state;
+            return this;
+        }
+
+		Transition this[State stateFrom, State stateTo] {
 			get {
 				Transition tr;
 				if (TryGetTransition(stateFrom, stateTo, out tr))
@@ -30,12 +96,12 @@ namespace ReactiveStateMachine {
 			}
 		}
 
-		public bool TryGetTransition(State stateFrom, State stateTo, out Transition tr) {
+		bool TryGetTransition(State stateFrom, State stateTo, out Transition tr) {
             tr = null;
 			Dictionary<State, Transition> s2t;
 			return _state2state.TryGetValue (stateFrom, out s2t) && s2t.TryGetValue (stateTo, out tr);			
 		}
-		public bool SetTransition(State stateFrom, State stateTo, Transition tr) {
+		bool SetTransition(State stateFrom, State stateTo, Transition tr) {
 			var replace = false;
 			Dictionary<State, Transition> s2t;
 			if (!_state2state.TryGetValue (stateFrom, out s2t))
@@ -45,48 +111,8 @@ namespace ReactiveStateMachine {
 			s2t [stateTo] = tr;
 			return replace;
 		}
-        public bool TryGetHandler(State state, out StateHandler hr) {
+        bool TryGetHandler(State state, out StateHandler hr) {
             return _state2handler.TryGetValue(state, out hr);
-        }
-
-        #region Flow
-        public bool Is(State state) {
-            return _state.Equals(state);
-        }
-        public bool Next(State stateTo) {
-			var tr = this [_state, stateTo];
-			if (tr != null && tr.Next (_state)) {
-				_state = stateTo;
-				return true;
-			}
-			return false;
-        }
-        public void Update() {
-            StateHandler h;
-            if (TryGetHandler (_state, out h))
-                h.Update ();
-        }
-        #endregion
-
-        #region Definition
-        public Transition Tr(State stateFrom, State stateTo) {
-            Transition t;
-            if (!TryGetTransition(stateFrom, stateTo, out t))
-                t = this [stateFrom, stateTo] = new Transition (stateTo);
-            return t;
-        }
-        public StateHandler St(State state) {
-            StateHandler h;
-            if (!TryGetHandler(state, out h))
-                h = _state2handler [state] = new StateHandler (state);
-            return h;
-        }
-        #endregion
-
-        public StateMachine<State> Restart() { return Restart (_initialState); }
-        public StateMachine<State> Restart(State initialState) { 
-            _initialState = _state;
-            return this;
         }
 
 		public class StateHandler : IObservable<State> {
@@ -109,32 +135,34 @@ namespace ReactiveStateMachine {
 			#endregion
         }
 		public class Transition : IObservable<State, State> {
-            public readonly State NextState;
+			public readonly State stateFrom;
+            public readonly State stateTo;
 
             event System.Action<State, State> _observable;
             System.Func<State, State, bool> _condition;
 
-            public Transition(State nextState) {
-                this.NextState = nextState;
+            public Transition(State current, State next) {
+				this.stateFrom = current;
+                this.stateTo = next;
             }
 
             public Transition Cond(System.Func<State, State, bool> condition) {
                 this._condition = condition;
                 return this;
             }
-            public bool Next(State stateFrom) {
-                if (!Check(stateFrom))
-                    return false;
-
-                Notify (stateFrom);
-                return true;
+            public bool Next() {
+				if (Check ()) {
+					Notify ();
+					return true;
+				}
+				return false;
             }
-            bool Check(State stateFrom) {
-                return _condition == null || _condition (stateFrom, NextState);
+            bool Check() {
+                return _condition == null || _condition (stateFrom, stateTo);
             }
-            void Notify(State stateFrom) {
+            void Notify() {
                 if (_observable != null)
-                    _observable(stateFrom, NextState);                
+                    _observable(stateFrom, stateTo);                
             }
 			#region IObservable implementation
 			public System.IDisposable Subscribe (System.Action<State, State> observer) {
@@ -168,10 +196,47 @@ namespace ReactiveStateMachine {
 		}
 		#endregion
 	}
+	public class Chain<S, T> : System.IDisposable, IObservable<T> {
+		protected System.IDisposable _disposer;
+		protected event System.Action<T> _observer;
+
+		public Chain(System.IDisposable disposer) {
+			this._disposer = disposer;
+		}
+		protected void Notify(T t) {
+			if (_observer != null)
+				_observer (t);
+		}
+		#region IObservable implementation
+		public System.IDisposable Subscribe (System.Action<T> observer) {
+			_observer += observer;
+			return new Disposer (() => _observer -= observer);
+		}
+		#endregion
+		#region IDisposable implementation
+		public void Dispose () {
+			_disposer.Dispose();
+		}
+		#endregion
+	}
+	public class Filter<S> : Chain<S, S> {
+		public Filter(IObservable<S> observable, System.Func<S, bool> filter)
+			: base(observable.Subscribe ((s) =>	{
+				if (filter (s))
+					Notify(s);
+			})) {}
+	}
+	public class Select<S, T> : Chain<S, T> {
+		public Select(IObservable<S> observable, System.Func<S, T> converter)
+			: base(observable.Subscribe ((t) => Notify(converter (t)))) {}
+	}
 
 	public static class Extension {
 		public static IObservable<T> Where<T>(this IObservable<T> observable, System.Func<T, bool> filter) {
-			throw new System.NotImplementedException ();
+			return new Filter<T>(observable, filter);
+		}
+		public static IObservable<T> Select<S, T>(this IObservable<S> observable, System.Func<S, T> converter) {
+			return new Select<S, T> (observable, converter);
 		}
 	}
 }
