@@ -18,32 +18,48 @@ namespace ReactiveStateMachine {
 		}
 		public StateMachine() : this(default(State)) {}
 
-		#region Flow
-		public Output<State> OnUpdate() {
-			return _state;
-		}
-		public Output<Transition<State>> OnChange() {
-			return _transition;
-		}
-		public Output<State> St(State state) {
+		#region Wire
+		public StateHandler St(State state) {
 			StateHandler st;
 			if (!TryGetStateHandler (state, out st))
 				st = _stateMap [state] = new StateHandler (state);
 			return st;
 		}
-		public Output<Transition<State>> Tr(State stateFrom, State stateTo) {
+		public Output<State> St() {
+			return _state;
+		}
+		public TransitionHandler Tr(State stateFrom, State stateTo) {
 			Dictionary<State, TransitionHandler> state2transition;
 			if (!_transitionMap.TryGetValue (stateFrom, out state2transition))
-				state2transition = _transition [stateFrom] = new Dictionary<State, TransitionHandler> ();
+				state2transition = _transitionMap [stateFrom] = new Dictionary<State, TransitionHandler> ();
 			TransitionHandler tr;
 			if (!state2transition.TryGetValue (stateTo, out tr))
 				tr = state2transition [stateTo] = new TransitionHandler (stateFrom, stateTo);
 			return tr;
 		}
+		public Output<Transition<State>> Tr() {
+			return _transition;
+		}
 		#endregion
-		#region Definition
-		public bool Next() {
-			
+		#region Drive
+		public State Current { get { return _state.Value; } }
+		public bool Is (State state) {
+			return _state.Value.Equals(state);
+		}
+		public bool Next(State stateTo) {
+			TransitionHandler tr;
+			if (TryGetTransitionHandler(_state.Value, stateTo, out tr) && tr.Transit()) {
+				_transition.Value = tr.transition;
+				_state.Value = stateTo;
+				return true;
+			}
+			return false;
+		}
+		public void Update() {
+			StateHandler st;
+			if (TryGetStateHandler (_state.Value, out st))
+				st.Notify ();
+			_state.Notify ();
 		}
 		#endregion
 
@@ -58,30 +74,30 @@ namespace ReactiveStateMachine {
 		}
 
 		public class StateHandler : Output<State> {
-			readonly State _state;
+			public readonly State state;
 			event System.Action<State> _onUpdate;
 
 			public StateHandler(State state) {
-				this._state = state;
+				this.state = state;
 			}
-			public void Notiry() {
+			public void Notify() {
 				if (_onUpdate != null)
-					_onUpdate (_state);
+					_onUpdate (state);
 			}
 			#region Output implementation
-			public Cutter Input (System.Action<State> input) {
+			public Cutter Connect (System.Action<State> input) {
 				_onUpdate += input;
-				return new Cutter (_onUpdate -= input);
+				return new Cutter (() => _onUpdate -= input);
 			}
 			#endregion
 		}
 		public class TransitionHandler : Output<Transition<State>> {
-			readonly Transition<State> _transition;
-			System.Func<Transition<State>, bool> _condition;
+			public readonly Transition<State> transition;
+			System.Func<State, State, bool> _condition;
 			event System.Action<Transition<State>> _onChange;
 
 			public TransitionHandler(Transition<State> transition) {
-				this._transition = transition;
+				this.transition = transition;
 			}
 			public TransitionHandler(State stateFrom, State stateTo) 
 				: this(new Transition<State>(stateFrom, stateTo)) {}
@@ -91,17 +107,21 @@ namespace ReactiveStateMachine {
 					Notify ();
 				return canTransit;
 			}
+			public TransitionHandler Cond(System.Func<State, State, bool> cond) {
+				_condition = cond;
+				return this;
+			}
 			bool Check() {
-				return _condition == null || _condition ();
+				return _condition == null || _condition (transition.stateFrom, transition.stateTo);
 			}
 			void Notify() {
 				if (_onChange != null)
-					_onChange (_transition);
+					_onChange (transition);
 			}
 			#region Output implementation
-			public Cutter Input (System.Action<Transition<State>> input) {
+			public Cutter Connect (System.Action<Transition<State>> input) {
 				_onChange += input;
-				return new Cutter (_onChange -= input);
+				return new Cutter (() => _onChange -= input);
 			}
 			#endregion
 		}
@@ -130,7 +150,7 @@ namespace ReactiveStateMachine {
 		#endregion
 	}
 	public interface Output<T> {
-		Cutter Input (System.Action<T> input);
+		Cutter Connect (System.Action<T> input);
 	}
 	public class Wire<T> : Output<T> {
 		event System.Action<T> _onChange;
@@ -146,20 +166,20 @@ namespace ReactiveStateMachine {
 				return _value;
 			}
 			set {
-				if (_value != value)
+				if (!_value.Equals(value))
 					Set (value);
 			}
 		}
 		public void Set(T t) {
 			_value = t;
-			Notify (t);
+			Notify ();
 		}
-		void Notify(T t) {
+		public void Notify() {
 			if (_onChange != null)
-				_onChange (t);
+				_onChange (_value);
 		}
 		#region Output implementation
-		public Cutter Input (System.Action<T> input) {
+		public Cutter Connect (System.Action<T> input) {
 			_onChange += input;
 			return new Cutter (() => _onChange -= input);
 		}
